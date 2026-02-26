@@ -5,7 +5,7 @@ Django>=4.2.28,<4.3
 djangorestframework>=3.15.0,<3.16
 
 # HuggingFace Transformers (latest compatible)
-transformers>=4.59.0,<5.0
+#transformers>=4.59.0,<5.0
 
 # Tokenizers matching transformers
 tokenizers>=0.13.3,<0.14
