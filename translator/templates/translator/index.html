@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>muhoroAI - Smart Translator</title>
+</head>
+<body style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(to right, #e0f7fa, #e8f5e9); max-width:800px; margin:30px auto; padding:20px; border-radius:10px; box-shadow:0 8px 20px rgba(0,0,0,0.15);">
+
+<h1 style="text-align:center; color:#00796b; margin-bottom:25px; text-shadow:1px 1px 2px rgba(0,0,0,0.2);">muhoroAI 🌐</h1>
+
+<div style="margin-bottom:15px;">
+<textarea id="inputText" placeholder="Type something..."
+          style="width:100%; height:130px; padding:12px; font-size:16px; border-radius:8px; border:1px solid #b2dfdb; box-shadow: inset 0 2px 5px rgba(0,0,0,0.05);"></textarea>
+</div>
+
+<div style="margin-bottom:15px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+<select id="targetLang" style="padding:10px; border-radius:6px; border:1px solid #b2dfdb; font-weight:bold; flex:1;">
+    <option value="eng_Latn">English</option>
+    <option value="swh_Latn">Swahili</option>
+    <option value="fra_Latn">French</option>
+    <option value="deu_Latn">German</option>
+    <option value="spa_Latn">Spanish</option>
+</select>
+
+<button onclick="translateText()" 
+        style="padding:10px 18px; border:none; border-radius:6px; background:#4CAF50; color:white; font-weight:bold; cursor:pointer; box-shadow:0 3px 6px rgba(0,0,0,0.1); transition:0.3s;">Translate</button>
+
+<button onclick="startSpeech()" 
+        id="micBtn" style="padding:10px 18px; border:none; border-radius:6px; background:#2196F3; color:white; font-weight:bold; cursor:pointer; box-shadow:0 3px 6px rgba(0,0,0,0.1); transition:0.3s;">🎤 Speak</button>
+</div>
+
+<div id="micStatus" style="margin-bottom:10px; font-style:italic; color:#d84315;"></div>
+<div id="detectedLang" style="margin-bottom:15px; font-weight:bold; color:#00796b;"></div>
+
+<div id="spinner" style="display:none; margin-bottom:15px; font-weight:bold; color:#4CAF50;">
+    <div style="border:4px solid #f3f3f3; border-top:4px solid #4CAF50; border-radius:50%; width:24px; height:24px; display:inline-block; vertical-align:middle; animation: spin 1s linear infinite; margin-right:10px;"></div>
+    Translating...
+</div>
+
+<div id="result" style="display:none; margin-bottom:20px; padding:15px; background:#b2dfdb; border-radius:8px; border:1px solid #80cbc4; box-shadow: inset 0 2px 5px rgba(0,0,0,0.05);">
+    <p><strong>Detected Language:</strong> <span id="detected"></span></p>
+    <p><strong>Translation:</strong></p>
+    <p id="translation"></p>
+</div>
+
+<div style="margin-top:20px;">
+    <h4 style="color:#00796b;">History</h4>
+    <div id="historyList" style="background:white; border-radius:6px; padding:10px; box-shadow:0 2px 5px rgba(0,0,0,0.05); max-height:200px; overflow-y:auto;"></div>
+    <button onclick="clearHistory()" style="padding:6px 12px; margin-top:10px; border:none; border-radius:6px; background:#f44336; color:white; cursor:pointer; font-weight:bold;">Clear History</button>
+</div>
+
+<!-- Modal -->
+<div id="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; justify-content:center; align-items:center;">
+    <div style="background:white; padding:25px; border-radius:8px; max-width:400px; text-align:center; box-shadow:0 6px 15px rgba(0,0,0,0.2);">
+        <p id="modalMessage" style="margin-bottom:20px; font-size:16px; color:#00796b;"></p>
+        <button onclick="closeModal()" style="padding:10px 18px; background:#4CAF50; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold;">OK</button>
+    </div>
+</div>
+
+<style>
+@keyframes spin { 0% { transform: rotate(0deg);} 100% { transform: rotate(360deg);} }
+button:hover { opacity:0.85; }
+.history-item:hover { background:#e0f2f1; }
+</style>
+
+<script>
+let timeout = null;
+
+// Realtime typing detection + auto translation
+document.getElementById("inputText").addEventListener("input", function() {
+    clearTimeout(timeout);
+    detectLanguageRealtime(this.value);
+    timeout = setTimeout(() => { translateText(); }, 800);
+});
+
+// Fetch translation
+async function translateText() {
+    const text = document.getElementById("inputText").value;
+    const target = document.getElementById("targetLang").value;
+
+    if(!text.trim()) { showModal("Please enter text to translate."); return; }
+
+    document.getElementById("spinner").style.display = "block";
+
+    try {
+        const response = await fetch("/translate/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken") },
+            body: JSON.stringify({ text, target })
+        });
+        const data = await response.json();
+
+        document.getElementById("spinner").style.display = "none";
+        document.getElementById("result").style.display = "block";
+        document.getElementById("detected").innerText = data.detected_language;
+        document.getElementById("translation").innerText = data.translation;
+
+        saveHistory(text, data.translation);
+    } catch(e) {
+        document.getElementById("spinner").style.display = "none";
+        showModal("Translation failed. Please try again.");
+    }
+}
+
+// Real-time language detection (calls backend or heuristic)
+async function detectLanguageRealtime(text) {
+    if(!text.trim()) { document.getElementById("detectedLang").innerText=""; return; }
+
+    try {
+        const response = await fetch("/api/detect/", {
+            method: "POST",
+            headers: { "Content-Type":"application/json", "X-CSRFToken": getCookie("csrftoken") },
+            body: JSON.stringify({ text })
+        });
+        const data = await response.json();
+        document.getElementById("detectedLang").innerText = "Detected: " + data.language;
+    } catch(e) { document.getElementById("detectedLang").innerText=""; }
+}
+
+// Speech input
+function startSpeech() {
+    if(!('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) { showModal("Speech recognition is not supported."); return; }
+
+    if(!confirm("This will use your microphone. Allow access?")) return;
+
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = "en-US";
+
+    recognition.onstart = () => { document.getElementById("micStatus").innerText="Listening…"; };
+    recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        document.getElementById("inputText").value = transcript;
+        document.getElementById("micStatus").innerText="";
+        translateText(); // auto-translate
+    };
+    recognition.onerror = () => { document.getElementById("micStatus").innerText=""; showModal("Microphone access denied."); };
+    recognition.onend = () => { document.getElementById("micStatus").innerText=""; };
+    recognition.start();
+}
+
+// History
+function saveHistory(input, output) {
+    let history = JSON.parse(localStorage.getItem("translationHistory"))||[];
+    history.unshift({input,output});
+    history=history.slice(0,5);
+    localStorage.setItem("translationHistory",JSON.stringify(history));
+    renderHistory();
+}
+function renderHistory() {
+    const history=JSON.parse(localStorage.getItem("translationHistory"))||[];
+    const container=document.getElementById("historyList");
+    container.innerHTML="";
+    history.forEach(item=>{
+        const div=document.createElement("div");
+        div.className="history-item";
+        div.style.padding="6px"; div.style.borderBottom="1px solid #e0f2f1"; div.style.cursor="pointer";
+        div.innerText=item.input+" → "+item.output;
+        div.onclick=()=>{ document.getElementById("inputText").value=item.input; translateText(); };
+        container.appendChild(div);
+    });
+}
+function clearHistory() { localStorage.removeItem("translationHistory"); renderHistory(); }
+
+// Modal
+function showModal(msg){ document.getElementById("modalMessage").innerText=msg; document.getElementById("modal").style.display="flex";}
+function closeModal(){ document.getElementById("modal").style.display="none";}
+
+// CSRF
+function getCookie(name){ let cookieValue=null; if(document.cookie){ const cookies=document.cookie.split(";"); for(let c of cookies){ c=c.trim(); if(c.startsWith(name+"=")){ cookieValue=decodeURIComponent(c.substring(name.length+1)); break; } } } return cookieValue; }
+
+renderHistory();
+</script>
+</body>
+</html>
