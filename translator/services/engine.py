@@ -13,7 +13,7 @@ LANG_MAP = {
     "de": "deu_Latn",
     "sw": "swh_Latn",
     "es": "spa_Latn", 
-    "it": "itl_latn" 
+    "it": "itl_Latn" 
 }
 
 def translate_text(text, target_lang="eng_Latn"):
